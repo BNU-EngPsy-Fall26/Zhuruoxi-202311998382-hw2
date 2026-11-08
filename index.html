@@ -4,18 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>注意实验室 · 星夜启程</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23FFE3A0'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%230A1832'/%3E%3C/svg%3E">
 <style>
   :root {
     --night:      #0A1832;
-    --night-mid:  #13294F;
     --mist:       #A9C6EA;
     --ink:        #F2F7FF;
     --gold:       #FFE3A0;
     --gold-deep:  #F0BC6A;
-    --aqua:       #9BE3E8;
-    --pink:       #FFC9D6;
     --panel:      rgba(13, 27, 58, .58);
     --line:       rgba(169, 198, 234, .35);
+    /* 功能色令牌（全站唯一色源）：实验屏反馈用白底组，状态提示用深底组 */
+    --fb-ok:      #1F9D4D;
+    --fb-err:     #D63A2F;
+    --err-ink:    #FFB4B4;
     --font-display: "Ma Shan Zheng", "ZCOOL QingKe HuangYou", "KaiTi", serif;
     --font-body: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
     --dur-fast: 150ms;
@@ -34,6 +36,8 @@
     font-display: swap;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .results button:focus-visible { outline-color: #B87F2E; }
   html, body { height: 100%; }
   body {
     background: var(--night) url("assets/bg.png") center / cover no-repeat fixed;
@@ -52,10 +56,10 @@
   .scene {
     position: fixed; inset: 0; z-index: 2;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    opacity: 0; pointer-events: none;
-    transition: opacity .45s ease;
+    opacity: 0; pointer-events: none; visibility: hidden;
+    transition: opacity .45s ease, visibility 0s linear .45s;
   }
-  .scene.active { opacity: 1; pointer-events: auto; }
+  .scene.active { opacity: 1; pointer-events: auto; visibility: visible; transition: opacity .45s ease; }
 
   /* ============ 飞船 ============ */
   .ship-idle {
@@ -108,6 +112,21 @@
     100% { box-shadow: 0 0 26px rgba(255,227,160,.5), 0 10px 34px rgba(10,20,46,.45); transform: scale(1); }
   }
   .bridge footer { position: absolute; bottom: 26px; font-size: 13px; color: var(--mist); letter-spacing: .1em; }
+  /* 断点备份提示条（仅舰桥页，检测到上次未完成会话时出现） */
+  .bk-banner {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+    max-width: min(92vw, 660px); padding: 10px 18px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    color: var(--mist); font-size: 13px; line-height: 1.6; backdrop-filter: blur(8px);
+  }
+  .bk-btn {
+    background: none; border: 1px solid var(--gold-deep); border-radius: 999px;
+    color: var(--gold); font: 400 13px/1.2 var(--font-body); padding: 5px 14px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .bk-btn:hover { background: rgba(255,227,160,.12); }
+  .bk-btn.bk-dim { border-color: var(--line); color: var(--mist); }
 
   /* ============ 通用面板 ============ */
   .panel-card {
@@ -234,15 +253,6 @@
     50%      { box-shadow: inset -20px -24px 46px rgba(8,16,42,.7), 0 0 70px rgba(255,227,160,.55), 0 14px 30px rgba(8,16,42,.4); }
   }
 
-  .btn-back {
-    position: absolute; top: 30px; left: 34px;
-    background: rgba(13,27,58,.45); border: 1px solid var(--line); border-radius: 999px;
-    color: var(--mist); font: 400 15px/1 var(--font-body); letter-spacing: .12em;
-    padding: 10px 24px; cursor: pointer; backdrop-filter: blur(6px);
-    transition: color var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast) var(--ease-bounce);
-  }
-  .btn-back:hover { color: var(--gold); border-color: var(--gold-deep); transform: translateX(-3px); }
-
   .ship-fly {
     position: fixed; left: 50%; bottom: 0; z-index: 3;
     width: 140px; margin-left: -70px;
@@ -266,7 +276,8 @@
     background: rgba(8,16,38,.4);
   }
   .instruct .flow-line { color: var(--mist); font-size: 13.5px; margin-top: 12px; letter-spacing: .04em; }
-  .instruct .stim-preview { margin: 14px auto 4px; display: block; background: #fff; border-radius: 18px; }
+  .instruct .ins-source { color: var(--mist); font-size: 12.5px; font-style: italic; margin-top: 10px; letter-spacing: .02em; }
+  .instruct .stim-preview { margin: 14px auto 4px; display: block; background: #fff; border-radius: 18px; max-width: 100%; height: auto; }
 
   /* ============ 试次屏（纯白，实验铁律） ============ */
   .trial-screen {
@@ -281,16 +292,22 @@
     transition: width .25s ease;
   }
   .keyhint {
-    position: absolute; bottom: 24px; width: 100%; text-align: center;
-    color: #666; font-size: 15px; letter-spacing: .06em; pointer-events: none;
+    position: absolute; bottom: 26px; width: 100%;
+    display: flex; justify-content: center; gap: 90px;
+    pointer-events: none;
   }
-  .keyhint b {
-    display: inline-block; border: 1.5px solid #999; border-radius: 8px;
-    padding: 2px 11px; margin: 0 4px; color: #333; font-weight: 700; background: #fafafa;
+  .keycard { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; }
+  .keycap {
+    display: inline-block; border: 2px solid #444; border-radius: 10px;
+    padding: 6px 22px; font: 700 22px/1.2 var(--font-body); color: #222; background: #fafafa;
   }
+  .keymean { font: 600 17px/1.2 var(--font-body); color: #333; letter-spacing: .08em; }
+  .keyicon { height: 46px; margin-top: 2px; }
+  .keynote { font: 400 12px/1.3 var(--font-body); color: #777; letter-spacing: .04em; }
+  .fb-correct { display: block; font-size: 22px; font-weight: 600; margin-top: 10px; }
   .taskhint {
     position: absolute; top: 18px; width: 100%; text-align: center;
-    color: #999; font-size: 13.5px; letter-spacing: .12em; pointer-events: none;
+    color: #666; font-size: 13.5px; letter-spacing: .12em; pointer-events: none;
   }
   .feedback {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -317,6 +334,8 @@
     box-shadow: 0 0 20px rgba(255,227,160,.8);
     transform: translate(-50%, -50%);
     animation: calib-pulse 1.2s ease-in-out infinite;
+    font: 700 13px/22px sans-serif; color: #5a4300; text-align: center;
+    padding: 0;
   }
   @keyframes calib-pulse { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.25); } }
 
@@ -329,25 +348,26 @@
     font-size: 46px; color: #4A3212;
   }
   .upload-line { font-size: 14px; margin-top: 6px; }
-  .upload-line.ok { color: #9BE8B4; }
-  .upload-line.err { color: #FFB4B4; }
-  .upload-line.warn { color: var(--gold); }
+  .upload-line.ok { color: var(--gold); }
+  .upload-line.err { color: var(--err-ink); }
+  .upload-line.warn { color: var(--mist); }
 
   /* ============ 结果页（浅色） ============ */
   .results { background: #F6F8FC; color: #22304A; overflow-y: auto; justify-content: flex-start; padding: 46px 20px 60px; }
+  .results .r-lead { font: 400 15px/1.6 var(--font-display); letter-spacing: .24em; color: #8A6A33; }
   .results h2 { font: 400 34px/1.3 var(--font-display); color: #B87F2E; letter-spacing: .12em; margin-bottom: 4px; }
-  .results .r-sub { color: #6B7A99; font-size: 13.5px; margin-bottom: 18px; }
+  .results .r-sub { color: #5A6B8C; font-size: 13.5px; margin-bottom: 18px; }
   .chart-card {
     background: #fff; border: 1px solid #E3E9F4; border-radius: 20px;
     padding: 22px 26px; margin: 14px 0; width: min(92vw, 860px);
     box-shadow: 0 8px 26px rgba(30,50,90,.07);
   }
   .chart-card h3 { font-size: 17px; color: #22304A; margin-bottom: 6px; }
-  .chart-card .note { font-size: 12.5px; color: #8A97B5; margin-top: 6px; line-height: 1.7; }
-  .chart-card canvas { display: block; margin: 0 auto; }
+  .chart-card .note { font-size: 12.5px; color: #5E6C8C; margin-top: 6px; line-height: 1.7; }
+  .chart-card canvas { display: block; margin: 0 auto; max-width: 100%; height: auto; }
   .btn-dark {
     margin-top: 18px; background: #22304A; color: #fff; border: none; border-radius: 999px;
-    font: 400 16px/1 var(--font-body); letter-spacing: .12em; padding: 12px 34px; cursor: pointer;
+    font: 400 17px/1 var(--font-display); letter-spacing: .16em; padding: 12px 36px 14px; cursor: pointer;
   }
   .btn-dark:hover { background: #33436B; }
 
@@ -410,33 +430,42 @@
   <p class="sub">Attention Lab</p>
   <p class="tagline">星夜启程，探索注意的边界</p>
   <button class="btn-launch" id="launch-btn">启 程</button>
-  <footer>工程心理学课程作业 · 数据匿名上传 · 全程约 9 分钟</footer>
+  <div class="bk-banner" id="bk-banner">
+    <span id="bk-text"></span>
+    <button class="bk-btn" id="bk-download">下载备份 (CSV)</button>
+    <button class="bk-btn bk-dim" id="bk-clear">清除备份</button>
+  </div>
+  <footer>工程心理学课程作业 · 数据匿名上传 · 全程约 10–11 分钟 · <span id="ver-tag" style="opacity:.55">v1.1.0</span></footer>
 </section>
 
 <!-- ============ 场景：知情同意 + 编号 ============ -->
 <section class="scene" id="scene-consent">
   <div class="panel-card">
-    <h2>知情同意</h2>
-    <p>欢迎参加本注意实验。实验为北京师范大学《工程心理学》课程作业，内容包括两部分：图形辨别与视觉搜索，全程约 9 分钟。</p>
+    <h2>知情同意 <span class="dim" id="ver-badge" style="font-size:.55em;font-weight:400"></span></h2>
+    <p>欢迎参加本注意实验。实验为北京师范大学《工程心理学》课程作业，内容包括两部分：图形辨别与视觉搜索，全程约 10–11 分钟。</p>
     <ul>
       <li>实验<span class="em">完全匿名</span>：不收集姓名、学号等任何身份信息，仅以编号（如 P01）标识；</li>
+      <li>材料来源：实验一改编自 Chen (1982, <i>Science</i>) 的速示辨别范式；实验二改编自 Treisman & Gelade (1980, <i>Cognitive Psychology</i>) 的视觉搜索范式，拓扑搜索条件为本作业新增；</li>
       <li>数据仅用于课程作业分析，上传至课程「注意实验室」收数接口，仅项目创建者与课程教师可见；</li>
       <li>请使用桌面电脑、键盘作答，实验过程中请勿切换窗口；</li>
       <li>你可以随时关闭网页退出，已上传部分无法关联到你个人。</li>
     </ul>
+    <p class="dim" id="device-warn" style="display:none">⚠ 检测到小屏或触屏设备：本实验需要桌面电脑与键盘（F / J 作答），手机上无法正常完成，请换电脑参加。</p>
     <div class="form-row">
       <label for="pid-num">被试编号（主试分配，1–99）</label>
       <input type="number" id="pid-num" min="0" max="99" placeholder="如 1">
       <span class="dim">填 0 为测试模式（数据标记 test_，不进正式分析）</span>
     </div>
+    <p class="dim" id="pid-err" style="display:none;color:var(--err-ink)">请先填写 0–99 的被试编号，再勾选同意。</p>
     <div class="check-row">
       <input type="checkbox" id="consent-main">
       <label for="consent-main">我已阅读并理解以上说明，自愿匿名参加本实验。</label>
     </div>
     <div class="check-row" id="gaze-row" style="display:none">
       <input type="checkbox" id="consent-gaze">
-      <label for="consent-gaze">（可选·加分模块）我同意启用摄像头进行眼动校准。视频仅在本机浏览器内实时估计，<b>不上传、不保存</b>任何视频或人脸画面，拒绝不影响参加。</label>
+      <label for="consent-gaze">（可选·加分模块）我同意启用摄像头进行眼动校准与头部姿势检测。视频仅在本机浏览器内实时估计，<b>不上传、不保存</b>任何视频或人脸画面，实验中不会显示注视点，拒绝不影响参加。</label>
     </div>
+    <p class="dim" id="file-warn" style="display:none">当前是直接打开本地文件（file://），浏览器安全策略会阻止眼动模型加载，因此眼动选项已隐藏。若需要眼动数据，请关闭本页，双击同目录下的「启动实验.bat」重新打开。</p>
     <div>
       <button class="btn-gold" id="consent-btn" disabled>同意并开始</button>
     </div>
@@ -447,9 +476,10 @@
 <section class="scene" id="scene-calib">
   <div class="panel-card" style="text-align:center">
     <h2>眼动校准</h2>
-    <p>请依次点击屏幕上出现的 <span class="em">5 个金色圆点</span>（中心 + 四角），点击时眼睛看向圆点。</p>
-    <p class="dim">校准限时 20 秒，超时自动跳过并继续实验，不影响你的参加。</p>
-    <p class="dim" id="calib-status">正在请求摄像头权限…</p>
+    <p>请依次点击屏幕周围出现的 <span class="em">9 个金色圆点</span>（每次只出现一个），<span class="em">每个点需注视并点击 5 次</span>（共 45 次），点击时眼睛看向圆点。</p>
+    <p class="dim">校准限时 60 秒，超时自动跳过并继续实验，不影响你的参加。校准期间请保持头部自然端正，系统将同步记录头部姿势基线。</p>
+    <p class="dim" id="calib-status">正在加载眼动组件…</p>
+    <button class="btn-ghost" id="calib-skip" style="margin-top:14px">摄像头没反应？跳过眼动，直接开始</button>
   </div>
 </section>
 
@@ -462,7 +492,7 @@
       <div class="planet p1"></div>
       <div class="planet-label">
         <div class="p-name">知觉星</div>
-        <div class="p-meta">实验一 · 图形辨别 · 约 3.5 分钟</div>
+        <div class="p-meta">实验一 · 图形辨别 · 约 4 分钟</div>
         <div class="p-state" id="state-1"></div>
       </div>
     </button>
@@ -470,7 +500,7 @@
       <div class="planet p2"><div class="ring"></div></div>
       <div class="planet-label">
         <div class="p-name">搜索星</div>
-        <div class="p-meta">实验二 · 视觉搜索 · 约 5.5 分钟</div>
+        <div class="p-meta">实验二 · 视觉搜索 · 约 6 分钟</div>
         <div class="p-state" id="state-2"></div>
       </div>
     </button>
@@ -487,6 +517,7 @@
     <div id="ins-body"></div>
     <canvas class="stim-preview" id="ins-preview" width="560" height="180"></canvas>
     <p class="flow-line" id="ins-flow"></p>
+    <p class="ins-source" id="ins-source"></p>
     <div style="text-align:center">
       <button class="btn-gold" id="ins-start">开始练习</button>
     </div>
@@ -501,6 +532,19 @@
   <div class="keyhint" id="keyhint"></div>
   <div class="feedback" id="feedback"></div>
 </div>
+
+<!-- ============ 场景：练习结束确认 ============ -->
+<section class="scene" id="scene-practice-end">
+  <div class="panel-card" style="text-align:center">
+    <h2>练习完成</h2>
+    <p id="pe-text">本部分练习结束。</p>
+    <p class="dim">正式试次按键后同样显示对错反馈（未按会显示「超时」），反馈即下一题开始的信号。确认理解任务后即可开始；若还没把握，可以再练一轮。</p>
+    <div>
+      <button class="btn-gold" id="pe-formal">开始正式实验</button>
+      <button class="btn-ghost" id="pe-again">再练一次</button>
+    </div>
+  </div>
+</section>
 
 <!-- ============ 场景：休息 ============ -->
 <section class="scene" id="scene-rest">
@@ -525,6 +569,7 @@
 
 <!-- ============ 场景：结果可视化 ============ -->
 <section class="scene results" id="scene-results">
+  <p class="r-lead">离开驾驶舱，进入分析室——</p>
   <h2>结果速览</h2>
   <p class="r-sub" id="r-sub">当前为你的个人数据；金色阴影为收数前注册的预测带，参考线来自原文献。两点斜率不检验完整线性，参考线不是拟合结果。</p>
   <div class="chart-card">
@@ -536,6 +581,12 @@
     <h3>实验二 · ΔRT（set size 18 − 6，目标在场）</h3>
     <canvas id="chart2" width="800" height="380"></canvas>
     <p class="note" id="chart2-note"></p>
+  </div>
+  <div class="chart-card" id="gaze-card" style="display:none">
+    <h3>眼动记录 · 注视热点图（本机摄像头估计）</h3>
+    <canvas id="chart-gaze" width="800" height="450"></canvas>
+    <p class="note" id="gaze-note"></p>
+    <button class="btn-dark" id="btn-gaze-csv" style="margin-top:10px">下载眼动坐标 (CSV)</button>
   </div>
   <div>
     <button class="btn-dark" id="btn-class">对比全班数据（需联网）</button>
@@ -552,7 +603,8 @@
    ============================================================ */
 var LAB = 'https://attention-lab-production.up.railway.app';
 var PROJECT = 'F2EMS2';   // 6 位项目码（公开）；下载密钥不写入代码/README/git
-var VER = '1.0.0';
+var VER = '1.3.0';   /* 1.3.0: 9点×5次校准 + MediaPipe头动检测 + 红点彻底关闭(showGazeDot) */
+$('ver-badge').textContent = '程序版本 v' + VER;
 
 /* 12 行被试间平衡分配表（收数前冻结，README 存档）
    expOrder: 0=先实验一 1=先实验二；e1Block: 0=拓扑block先 1=形状block先；
@@ -587,20 +639,23 @@ var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
    全局状态
    ============================================================ */
 var S = {
-  num: 1, pid: 'P01', test: false,
+  num: 1, pid: 'P01', test: false, started: false,
   assign: ASSIGN[0],
   order: ['e1','e2'],
   done: { e1: false, e2: false },
   data: { e1: [], e2: [] },
   upload: { e1: null, e2: null },
-  meta: {},
+  uploadMsg: { e1: '', e2: '' },
+  blurs: 0,
   hz: 60
 };
 
 /* 眼动（可选加分模块） */
 var G = {
   wanted: false, available: false, active: false,
-  calibrated: false, cur: null, trialSamples: null
+  calibrated: false, cur: null, trialSamples: null,
+  samples: [],   /* 全程注视坐标（归一化，仅记录不呈现），用于结果页热点图 */
+  headBase: null /* MediaPipe 头部姿势基线（校准结束时采样），试次中用于衡量头动 */
 };
 
 /* ============================================================
@@ -670,6 +725,8 @@ function resizeBg() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   makeFlies();
   if (reduceMotion) drawBg(0);
+  /* 实验屏打开时窗口尺寸变化（如 F11 全屏）：立即重设刺激画布并回白底，避免旧分辨率拉伸错位 */
+  if ($('trial-screen').classList.contains('active')) { sizeStim(); clearStim(); }
 }
 function makeFlies() {
   flies = [];
@@ -718,7 +775,8 @@ function drawBg(t) {
     ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - m.vx * 14, m.y - m.vy * 14); ctx.stroke();
   }
 }
-function loopBg(t) { drawBg(t); requestAnimationFrame(loopBg); }
+var bgPaused = false;
+function loopBg(t) { if (!bgPaused) drawBg(t); requestAnimationFrame(loopBg); }
 window.addEventListener('resize', resizeBg);
 resizeBg();
 if (!reduceMotion) requestAnimationFrame(loopBg);
@@ -884,16 +942,72 @@ function gazeLoadThen(cb) {
   setTimeout(function () { if (!done) { done = true; cb(false); } }, 12000);
   document.head.appendChild(sc);
 }
+/* ---- MediaPipe FaceMesh 头部姿势估计 ----
+   webgazer 内置 tracker 即 MediaPipe FaceMesh（468 关键点，本离线包已 vendored）。
+   直接从其关键点几何关系解算 yaw/pitch/roll 三个相对量：
+     yaw   = 鼻尖相对双眼中点的水平偏移 / 双眼距        （+ 表示向右转头）
+     pitch = 鼻尖到双眼中点距离 / 鼻尖到下巴距离的比值   （大 = 低头，小 = 仰头）
+     roll  = 双眼连线与水平线的夹角（度）               （头部侧倾）
+   均为无量纲相对量，供课堂分析与头动筛查，非绝对姿态角。 */
+function headPoseNow() {
+  if (!G.active) return null;
+  try {
+    var pos = webgazer.getTracker().getPositions();
+    if (!pos || pos.length < 455) return null;
+    var le = pos[33], re = pos[263], nose = pos[1], chin = pos[152];
+    var eyeDx = re[0] - le[0], eyeDy = re[1] - le[1];
+    var eyeDist = Math.sqrt(eyeDx * eyeDx + eyeDy * eyeDy);
+    if (eyeDist < 1e-6) return null;
+    var midX = (le[0] + re[0]) / 2, midY = (le[1] + re[1]) / 2;
+    var noseChin = chin[1] - midY;
+    return {
+      yaw: (nose[0] - midX) / eyeDist,
+      pitch: Math.abs(noseChin) > 1e-6 ? (nose[1] - midY) / noseChin : 0,
+      roll: Math.atan2(eyeDy, eyeDx) * 180 / Math.PI
+    };
+  } catch (e) { return null; }
+}
+/* 校准结束后静默采样约 600ms，取均值作为头部姿势基线（不阻塞流程） */
+function headPoseCaptureBaseline() {
+  var bag = [];
+  var t = setInterval(function () {
+    var p = headPoseNow();
+    if (p) bag.push(p);
+  }, 100);
+  setTimeout(function () {
+    clearInterval(t);
+    if (!bag.length) return;
+    var sy = 0, sp = 0, sr = 0;
+    bag.forEach(function (p) { sy += p.yaw; sp += p.pitch; sr += p.roll; });
+    G.headBase = { yaw: sy / bag.length, pitch: sp / bag.length, roll: sr / bag.length };
+  }, 600);
+}
 function gazeStartSampling(trialId) {
   if (!G.active) { G.trialSamples = null; return; }
-  G.trialSamples = { id: trialId, n: 0, valid: 0, offSum: 0, t0: performance.now(), timer: null };
+  G.trialSamples = { id: trialId, n: 0, valid: 0, offSum: 0, t0: performance.now(), timer: null,
+    headN: 0, headOut: 0, yawSum: 0, pitchSum: 0, rollSum: 0 };
   var ts = G.trialSamples;
   ts.timer = setInterval(function () {
     ts.n++;
+    /* MediaPipe 头部姿势：每个采样点记录与基线的偏离，头动过大计入 headOut */
+    var hp = headPoseNow();
+    if (hp) {
+      ts.headN++;
+      var dyaw = Math.abs(hp.yaw - (G.headBase ? G.headBase.yaw : 0));
+      var dpitch = Math.abs(hp.pitch - (G.headBase ? G.headBase.pitch : 0.5));
+      var droll = Math.abs(hp.roll - (G.headBase ? G.headBase.roll : 0));
+      ts.yawSum += dyaw; ts.pitchSum += dpitch; ts.rollSum += droll;
+      if (dyaw > 0.2 || dpitch > 0.2 || droll > 12) ts.headOut++;
+    }
     if (G.cur && performance.now() - G.cur.t < 500) {
       var cx = W / 2, cy = H / 2;
       var off = Math.sqrt(Math.pow(G.cur.x - cx, 2) + Math.pow(G.cur.y - cy, 2)) / Math.min(W, H);
       if (off <= 0.75) { ts.valid++; ts.offSum += off; }
+      /* 记录注视坐标（归一化，屏幕内才记），供结果页热点图使用；实验过程中绝不回显红点 */
+      var nx = G.cur.x / W, ny = G.cur.y / H;
+      if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
+        G.samples.push({ e: trialId.slice(0, 2), x: Math.round(nx * 1000) / 1000, y: Math.round(ny * 1000) / 1000 });
+      }
     }
   }, 100);
 }
@@ -902,11 +1016,19 @@ function gazeStopSampling() {
   clearInterval(G.trialSamples.timer);
   var ts = G.trialSamples; G.trialSamples = null;
   if (!ts.n) return null;
-  return {
+  var out = {
     gz_n: ts.n,
     gz_v: round1(100 * ts.valid / ts.n) / 100,
     gz_off: ts.valid ? round1(1000 * ts.offSum / ts.valid) / 1000 : ''
   };
+  if (ts.headN) {
+    out.hd_n = ts.headN;
+    out.hd_yaw = round1(1000 * ts.yawSum / ts.headN) / 1000;
+    out.hd_pitch = round1(1000 * ts.pitchSum / ts.headN) / 1000;
+    out.hd_roll = round1(100 * ts.rollSum / ts.headN) / 100;
+    out.hd_out = round1(100 * ts.headOut / ts.headN) / 100;
+  }
+  return out;
 }
 
 /* ============================================================
@@ -914,20 +1036,18 @@ function gazeStopSampling() {
    ============================================================ */
 function waitResponse(windowMs) {
   return new Promise(function (resolve) {
-    var t0 = performance.now(), settled = false;
-    function cleanup() { window.removeEventListener('keydown', onKey); clearInterval(timer); }
+    var settled = false;
+    function cleanup() { window.removeEventListener('keydown', onKey); clearTimeout(timer); }
     function onKey(e) {
       var k = (e.key || '').toLowerCase();
       if (k !== 'f' && k !== 'j') return;
       if (settled) return; settled = true; cleanup();
       resolve({ key: k, t: performance.now() });
     }
-    var timer = setInterval(function () {
-      if (performance.now() - t0 >= windowMs) {
-        if (settled) return; settled = true; cleanup();
-        resolve({ key: null, t: null });
-      }
-    }, 16);
+    var timer = setTimeout(function () {
+      if (settled) return; settled = true; cleanup();
+      resolve({ key: null, t: null });
+    }, windowMs);
     window.addEventListener('keydown', onKey);
   });
 }
@@ -940,17 +1060,56 @@ function respLabel(key, posWord, negWord) {
 /* ============================================================
    试次屏控制
    ============================================================ */
-function trialScreen(on) { $('trial-screen').classList.toggle('active', on); }
-function setProgress(p) { $('progressbar').style.width = (p * 100).toFixed(1) + '%'; }
-function setHint(posWord, negWord) {
-  var fWord = S.assign.key === 0 ? posWord : negWord;
-  var jWord = S.assign.key === 0 ? negWord : posWord;
-  $('keyhint').innerHTML = '<b>F</b> ' + fWord + '　　<b>J</b> ' + jWord;
+function trialScreen(on) {
+  $('trial-screen').classList.toggle('active', on);
+  bgPaused = on;   /* 正式试次期间暂停萤火绘制，把帧预算留给刺激呈现 */
 }
-function showFeedback(ok) {
+function setProgress(p) { $('progressbar').style.width = (p * 100).toFixed(1) + '%'; }
+/* 在单个选项卡上并排画出该反应对应的图形样例（如「有洞」= 圆环/方环），防止被试中途忘记正确答案长什么样 */
+function drawKeyIcon(cv, icons) {
+  cv.width = icons.length * 46; cv.height = 46;
+  var c = cv.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  icons.forEach(function (ic, i) {
+    var x = 23 + i * 46, y = 23;
+    c.beginPath();
+    if (ic.shape === 'circle') {
+      c.arc(x, y, 16, 0, Math.PI * 2);
+      if (ic.ring) { c.moveTo(x + 8, y); c.arc(x, y, 8, 0, Math.PI * 2, true); }
+    } else if (ic.shape === 'square') {
+      c.rect(x - 14, y - 14, 28, 28);
+      if (ic.ring) c.rect(x - 7, y - 7, 14, 14);
+    } else { /* triangle */
+      c.moveTo(x, y - 17); c.lineTo(x - 15, y + 11); c.lineTo(x + 15, y + 11); c.closePath();
+    }
+    c.fillStyle = ic.color;
+    c.fill(ic.ring ? 'evenodd' : 'nonzero');
+  });
+}
+/* posIcons/negIcons：肯定/否定反应对应的图形样例数组（可空）；posNote/negNote：无图可画时的文字提示（可空） */
+function setHint(posWord, negWord, posIcons, negIcons, posNote, negNote) {
+  var swap = S.assign.key !== 0;
+  var fWord = swap ? negWord : posWord;
+  var jWord = swap ? posWord : negWord;
+  var fIcons = swap ? negIcons : posIcons;
+  var jIcons = swap ? posIcons : negIcons;
+  var fNote = swap ? negNote : posNote;
+  var jNote = swap ? posNote : negNote;
+  $('keyhint').innerHTML =
+    '<span class="keycard"><span class="keycap">F</span><span class="keymean">' + fWord + '</span><canvas class="keyicon" id="kicon-f"></canvas><span class="keynote">' + (fNote || '') + '</span></span>' +
+    '<span class="keycard"><span class="keycap">J</span><span class="keymean">' + jWord + '</span><canvas class="keyicon" id="kicon-j"></canvas><span class="keynote">' + (jNote || '') + '</span></span>';
+  if (fIcons && fIcons.length) drawKeyIcon($('kicon-f'), fIcons); else $('kicon-f').style.display = 'none';
+  if (jIcons && jIcons.length) drawKeyIcon($('kicon-j'), jIcons); else $('kicon-j').style.display = 'none';
+}
+function showFeedback(ok, timedOut, correctText) {
   var fb = $('feedback');
-  fb.textContent = ok ? '✓' : '✗';
-  fb.style.color = ok ? '#1F9D4D' : '#D63A2F';
+  if (ok) {
+    fb.textContent = '✓ 正确';
+  } else {
+    var head = timedOut ? '✗ 超时' : '✗ 错误';
+    fb.innerHTML = head + (correctText ? '<span class="fb-correct">正确答案：' + correctText + '</span>' : '');
+  }
+  fb.style.color = ok ? 'var(--fb-ok)' : 'var(--fb-err)';
 }
 function clearFeedback() { $('feedback').textContent = ''; }
 
@@ -958,7 +1117,8 @@ function clearFeedback() { $('feedback').textContent = ''; }
    实验一：拓扑/形状辨别 × SOA（30/60/600 ms）
    ============================================================ */
 var E1_SOAS = [30, 60, 600];
-var E1_RESPONSE_WINDOW = 1200, E1_MASK = 100, E1_FIX = 250, E1_ITI = 250;
+var E1_RESPONSE_WINDOW = 2000, E1_MASK = 100, E1_FIX = 250, E1_ITI = 500;
+var PRACTICE_FB = 900, FORMAL_FB = 800;   // 反馈停留时长：练习 0.9s / 正式 0.8s，兼作试次分隔
 
 function buildE1Trials(task) {
   var trials = [];
@@ -989,58 +1149,52 @@ function buildE1Practice(task) {
   return shuffle(trials);
 }
 
-async function runE1Block(task, practiceTrials, formalTrials) {
-  var blocks = [];
-  if (practiceTrials.length) blocks.push({ list: practiceTrials, practice: true });
-  blocks.push({ list: formalTrials, practice: false });
+async function runE1Trials(task, list, practice) {
+  for (var i = 0; i < list.length; i++) {
+    var tr = list[i];
+    gazeStartSampling('e1_' + task + '_' + (S.data.e1.length + 1));
+    drawFixation();
+    await frames(E1_FIX);
+    var onset = performance.now();
+    drawE1Stimulus(tr);
+    var dur = await frames(tr.soa);       // 实际呈现时长（帧对齐）
+    drawMask();
+    await frames(E1_MASK);
+    clearStim();
+    var r = await waitResponse(E1_RESPONSE_WINDOW);
+    var g = gazeStopSampling();
+    var rt = r.t ? round1(r.t - onset) : '';
+    var posWord = task === 'topo' ? 'hole' : 'circle';
+    var negWord = task === 'topo' ? 'solid' : 'square';
+    var resp = respLabel(r.key, posWord, negWord);
+    var answer = task === 'topo' ? (tr.hole ? 'hole' : 'solid') : tr.shape;
+    var corr = resp === '' ? 0 : (resp === answer ? 1 : 0);
+    var correctText = task === 'topo' ? (tr.hole ? '有洞' : '无洞') : (tr.shape === 'circle' ? '圆形' : '方形');
 
-  for (var b = 0; b < blocks.length; b++) {
-    var blk = blocks[b];
-    for (var i = 0; i < blk.list.length; i++) {
-      var tr = blk.list[i];
-      gazeStartSampling('e1_' + task + '_' + (S.data.e1.length + 1));
-      drawFixation();
-      await frames(E1_FIX);
-      var onset = performance.now();
-      drawE1Stimulus(tr);
-      var dur = await frames(tr.soa);       // 实际呈现时长（帧对齐）
-      drawMask();
-      await frames(E1_MASK);
-      clearStim();
-      var r = await waitResponse(E1_RESPONSE_WINDOW);
-      var g = gazeStopSampling();
-      var rt = r.t ? round1(r.t - onset) : '';
-      var posWord = task === 'topo' ? 'hole' : 'circle';
-      var negWord = task === 'topo' ? 'solid' : 'square';
-      var resp = respLabel(r.key, posWord, negWord);
-      var answer = task === 'topo' ? (tr.hole ? 'hole' : 'solid') : tr.shape;
-      var corr = resp === '' ? 0 : (resp === answer ? 1 : 0);
-
-      if (!blk.practice) {
-        var rec = {
-          trial: S.data.e1.length + 1,
-          block: task, soa: tr.soa, dur: round1(dur),
-          stim: task === 'topo' ? ((tr.hole ? 'ring_' : 'solid_') + tr.outline) : tr.shape,
-          hole: tr.hole, outline: tr.outline,
-          resp: resp, key: r.key || '', corr: corr, rt: rt, to: r.key ? 0 : 1
-        };
-        if (g) { rec.gz_n = g.gz_n; rec.gz_v = g.gz_v; rec.gz_off = g.gz_off; }
-        S.data.e1.push(rec);
-      } else {
-        showFeedback(corr === 1);
-        await sleep(450);
-        clearFeedback();
-      }
-      setProgress(S.data.e1.length / 60);
-      await frames(E1_ITI);
+    showFeedback(corr === 1, !r.key, correctText);
+    await sleep(practice ? PRACTICE_FB : FORMAL_FB);
+    clearFeedback();
+    if (!practice) {
+      var rec = {
+        trial: S.data.e1.length + 1,
+        block: task, soa: tr.soa, dur: round1(dur),
+        stim: task === 'topo' ? ((tr.hole ? 'ring_' : 'solid_') + tr.outline) : tr.shape,
+        hole: tr.hole, outline: tr.outline,
+        resp: resp, key: r.key || '', corr: corr, rt: rt, to: r.key ? 0 : 1
+      };
+      if (g) { for (var gk in g) rec[gk] = g[gk]; }
+      S.data.e1.push(rec);
+      saveBackup();
     }
+    setProgress(S.data.e1.length / 60);
+    await frames(E1_ITI);
   }
 }
 
 /* ============================================================
    实验二：FIT 特征/联合/拓扑视觉搜索
    ============================================================ */
-var E2_SETS = [6, 18], E2_WINDOW = 1700, E2_FIX = 250, E2_ITI = 250;
+var E2_SETS = [6, 18], E2_WINDOW = 2500, E2_FIX = 250, E2_ITI = 500;
 
 function e2TargetSpec(cond, ttype) {
   var dir = S.assign.topoDir; // 0=找圆环 1=找实心圆
@@ -1102,44 +1256,38 @@ function makeArrayItems(tr) {
   return { items: items, s: grid.s };
 }
 
-async function runE2Block(cond, practiceTrials, formalTrials) {
-  var blocks = [];
-  if (practiceTrials.length) blocks.push({ list: practiceTrials, practice: true });
-  blocks.push({ list: formalTrials, practice: false });
+async function runE2Trials(cond, list, practice) {
+  for (var i = 0; i < list.length; i++) {
+    var tr = list[i];
+    gazeStartSampling('e2_' + cond + '_' + (S.data.e2.length + 1));
+    drawFixation();
+    await frames(E2_FIX);
+    var arr = makeArrayItems(tr);
+    drawArray(arr.items, arr.s);
+    var onset = performance.now();
+    var r = await waitResponse(E2_WINDOW);
+    var g = gazeStopSampling();
+    clearStim();
+    var rt = r.t ? round1(r.t - onset) : '';
+    var resp = respLabel(r.key, 'present', 'absent');
+    var corr = resp === '' ? 0 : ((resp === 'present') === (tr.target === 1) ? 1 : 0);
+    var correctText = tr.target ? '有目标' : '无目标';
 
-  for (var b = 0; b < blocks.length; b++) {
-    var blk = blocks[b];
-    for (var i = 0; i < blk.list.length; i++) {
-      var tr = blk.list[i];
-      gazeStartSampling('e2_' + cond + '_' + (S.data.e2.length + 1));
-      drawFixation();
-      await frames(E2_FIX);
-      var arr = makeArrayItems(tr);
-      drawArray(arr.items, arr.s);
-      var onset = performance.now();
-      var r = await waitResponse(E2_WINDOW);
-      var g = gazeStopSampling();
-      clearStim();
-      var rt = r.t ? round1(r.t - onset) : '';
-      var resp = respLabel(r.key, 'present', 'absent');
-      var corr = resp === '' ? 0 : ((resp === 'present') === (tr.target === 1) ? 1 : 0);
-
-      if (!blk.practice) {
-        var rec = {
-          trial: S.data.e2.length + 1,
-          block: cond, n: tr.n, target: tr.target, ttype: tr.ttype || '',
-          resp: resp, key: r.key || '', corr: corr, rt: rt, to: r.key ? 0 : 1
-        };
-        if (g) { rec.gz_n = g.gz_n; rec.gz_v = g.gz_v; rec.gz_off = g.gz_off; }
-        S.data.e2.push(rec);
-      } else {
-        showFeedback(corr === 1);
-        await sleep(450);
-        clearFeedback();
-      }
-      setProgress(S.data.e2.length / 120);
-      await frames(E2_ITI);
+    showFeedback(corr === 1, !r.key, correctText);
+    await sleep(practice ? PRACTICE_FB : FORMAL_FB);
+    clearFeedback();
+    if (!practice) {
+      var rec = {
+        trial: S.data.e2.length + 1,
+        block: cond, n: tr.n, target: tr.target, ttype: tr.ttype || '',
+        resp: resp, key: r.key || '', corr: corr, rt: rt, to: r.key ? 0 : 1
+      };
+      if (g) { for (var gk in g) rec[gk] = g[gk]; }
+      S.data.e2.push(rec);
+      saveBackup();
     }
+    setProgress(S.data.e2.length / 120);
+    await frames(E2_ITI);
   }
 }
 
@@ -1159,10 +1307,11 @@ function e1Instruct(task) {
   }
   var fWord = S.assign.key === 0 ? posWord : negWord;
   var jWord = S.assign.key === 0 ? negWord : posWord;
-  body += '<p style="margin-top:10px">按键：<span class="kbd">F</span> = ' + fWord + '　<span class="kbd">J</span> = ' + jWord + '。看不清也请猜一个，超时（1.2 秒）会记为错误。</p>';
+  body += '<p style="margin-top:10px">按键：<span class="kbd">F</span> = ' + fWord + '　<span class="kbd">J</span> = ' + jWord + '。看不清也请猜一个，超时（2 秒）会记为错误。</p>';
   $('ins-title').textContent = title;
   $('ins-body').innerHTML = body;
-  $('ins-flow').textContent = '试次流程：注视点 +（0.25 秒）→ 图形闪现 → 雪花掩蔽 → 按键反应 → 下一题。先练 6 题（有对错反馈），再正式作答 30 题（无反馈）。';
+  $('ins-flow').textContent = '试次流程：注视点 +（0.25 秒）→ 图形闪现 → 雪花掩蔽 → 按键反应 → 对错反馈 → 下一题。先练 6 题（反馈停留稍长），练习后可选择再练一轮或开始正式实验（正式 30 题，每题按键后同样显示反馈）。';
+  $('ins-source').innerHTML = '范式来源：改编自 Chen, L. (1982). Topological structure in visual perception. <i>Science, 218</i>, 699–700.';
   drawInsPreview(task === 'topo' ? 'e1topo' : 'e1shape');
 }
 function e2Instruct(cond) {
@@ -1182,10 +1331,11 @@ function e2Instruct(cond) {
   var fWord = S.assign.key === 0 ? '有目标' : '无目标';
   var jWord = S.assign.key === 0 ? '无目标' : '有目标';
   body = '<p>屏幕会同时出现 6 个或 18 个图形。请判断是否存在目标：' + targetDesc + '。</p>' +
-    '<p style="margin-top:10px">按键：<span class="kbd">F</span> = ' + fWord + '　<span class="kbd">J</span> = ' + jWord + '。请<b>又快又准</b>，1.7 秒内未答记为错误。</p>';
+    '<p style="margin-top:10px">按键：<span class="kbd">F</span> = ' + fWord + '　<span class="kbd">J</span> = ' + jWord + '。请<b>又快又准</b>，2.5 秒内未答记为错误。</p>';
   $('ins-title').textContent = title;
   $('ins-body').innerHTML = body;
-  $('ins-flow').textContent = '先练 6 题（有对错反馈），再正式作答 40 题（无反馈）。';
+  $('ins-flow').textContent = '先练 6 题（反馈停留稍长），练习后可选择再练一轮或开始正式实验（正式 40 题，每题按键后同样显示反馈）。';
+  $('ins-source').innerHTML = '范式来源：改编自 Treisman, A. M., & Gelade, G. (1980). A feature-integration theory of attention. <i>Cognitive Psychology, 12</i>, 97–136；拓扑搜索条件为本作业新增（对照 Chen, 2005）。';
   drawInsPreview('e2_' + cond);
 }
 function drawInsPreview(kind) {
@@ -1208,9 +1358,11 @@ function drawInsPreview(kind) {
     item(200, 'circle', '#161616', false); item(360, 'square', '#161616', false);
     label(c, [200, 360], ['圆形', '方形']);
   } else if (kind === 'e2_feature') {
-    item(120, 'circle', COLORS.blue, false); item(250, 'triangle', COLORS.red, false);
-    item(390, 'square', COLORS.green, false); item(490, 'circle', COLORS.red, false);
-    label(c, [120, 250, 390, 490], ['目标(蓝)', '目标(△)', '干扰', '干扰']);
+    /* 四种目标图形（蓝圆/蓝方/红三角/绿三角）+ 两种干扰项，全部列出 */
+    item(55, 'circle', COLORS.blue, false); item(140, 'square', COLORS.blue, false);
+    item(225, 'triangle', COLORS.red, false); item(310, 'triangle', COLORS.green, false);
+    item(425, 'square', COLORS.green, false); item(510, 'circle', COLORS.red, false);
+    label(c, [55, 140, 225, 310, 425, 510], ['目标(蓝)', '目标(蓝)', '目标(△)', '目标(△)', '干扰', '干扰']);
   } else if (kind === 'e2_conjunction') {
     item(160, 'circle', COLORS.green, false); item(330, 'square', COLORS.green, false); item(470, 'circle', COLORS.red, false);
     label(c, [160, 330, 470], ['目标', '干扰', '干扰']);
@@ -1229,9 +1381,12 @@ function drawInsPreview(kind) {
    ============================================================ */
 async function restScreen(text, sub, seconds) {
   $('rest-text').textContent = text;
-  $('rest-sub').textContent = sub || '';
+  var subEl = $('rest-sub');
   showScene('scene-rest');
-  await sleep(seconds * 1000);
+  for (var left = seconds; left > 0; left--) {
+    subEl.textContent = (sub ? sub + ' · ' : '') + '剩 ' + left + ' 秒';
+    await sleep(1000);
+  }
 }
 
 /* ============================================================
@@ -1243,6 +1398,7 @@ function buildMeta() {
     sw: window.screen.width, sh: window.screen.height,
     ww: W, wh: H, dpr: window.devicePixelRatio || 1,
     hz: Math.round(S.hz * 10) / 10,
+    blur: S.blurs,
     ver: VER, gaze: G.active ? (G.calibrated ? 'calibrated' : 'on') : 'off'
   };
 }
@@ -1270,33 +1426,84 @@ async function uploadExp(key, experiment) {
       var msg = experiment + '：已提交 ' + S.data[key].length + ' 试次';
       if (r.warnings) msg += '（警告：' + (typeof r.warnings === 'string' ? r.warnings : JSON.stringify(r.warnings)).slice(0, 120) + '）';
       S.upload[key] = 'ok';
+      S.uploadMsg[key] = msg;
+      if (S.upload.e1 === 'ok' && S.upload.e2 === 'ok') clearBackup();   /* 两部分均上传成功，本地备份完成使命 */
       if (line) { line.textContent = msg; line.className = 'upload-line ' + (r.warnings ? 'warn' : 'ok'); }
     } else {
       S.upload[key] = 'err';
-      if (line) { line.textContent = experiment + '：提交失败（' + ((r && r.msg) || '未知错误') + '），请点「下载数据备份」并联系主试'; line.className = 'upload-line err'; }
+      S.uploadMsg[key] = experiment + '：提交失败（' + ((r && r.msg) || '未知错误') + '），请点「下载数据备份」并联系主试';
+      if (line) { line.textContent = S.uploadMsg[key]; line.className = 'upload-line err'; }
     }
   } catch (e) {
     S.upload[key] = 'err';
-    if (line) { line.textContent = experiment + '：网络错误未能上传，请点「下载数据备份」并联系主试'; line.className = 'upload-line err'; }
+    S.uploadMsg[key] = experiment + '：网络错误未能上传，请点「下载数据备份」并联系主试';
+    if (line) { line.textContent = S.uploadMsg[key]; line.className = 'upload-line err'; }
   }
 }
-function csvOf(trials) {
+function csvCell(v) {
+  var s = (v === undefined || v === null) ? '' : String(v);
+  if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function csvOf(trials, extra) {
   if (!trials.length) return '';
-  var cols = Object.keys(trials[0]);
-  var lines = [cols.join(',')];
+  var cols = [];   /* 取所有行的列并集：即使个别试次缺眼动字段也不会整列错位 */
+  trials.forEach(function (t) { Object.keys(t).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+  var ext = extra ? Object.keys(extra) : [];
+  var head = cols.concat(ext);
+  var lines = [head.map(csvCell).join(',')];
   trials.forEach(function (t) {
-    lines.push(cols.map(function (c) { return t[c]; }).join(','));
+    lines.push(head.map(function (c) {
+      if (t[c] !== undefined) return csvCell(t[c]);
+      return extra && extra[c] !== undefined ? csvCell(extra[c]) : '';
+    }).join(','));
   });
   return '﻿' + lines.join('\n');
 }
 function downloadCSV() {
+  var m = buildMeta();
+  var extra = { participant: S.pid, condition: S.assign.code, hz: m.hz, gaze: m.gaze, ver: m.ver };
   var packs = [['topo_soa', S.data.e1], ['fit_topo_search', S.data.e2]];
   packs.forEach(function (p) {
     if (!p[1].length) return;
-    var blob = new Blob([csvOf(p[1])], { type: 'text/csv;charset=utf-8' });
+    var blob = new Blob([csvOf(p[1], extra)], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = S.pid + '_' + p[0] + '.csv';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  });
+}
+
+/* ============================================================
+   本地断点备份：每个正式试次后整包快照到 localStorage，
+   中途刷新/崩溃后可在舰桥页下载备份（不自动续跑，避免破坏平衡设计与编号归属）
+   ============================================================ */
+var BK_KEY = 'attention_lab_backup_v1';
+function saveBackup() {
+  try {
+    if (!S.data.e1.length && !S.data.e2.length) return;
+    localStorage.setItem(BK_KEY, JSON.stringify({
+      pid: S.pid, code: S.assign.code, meta: buildMeta(),
+      e1: S.data.e1, e2: S.data.e2, t: Date.now()
+    }));
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用：备份失败不影响实验 */ }
+}
+function loadBackup() {
+  try { return JSON.parse(localStorage.getItem(BK_KEY) || 'null'); } catch (e) { return null; }
+}
+function clearBackup() { try { localStorage.removeItem(BK_KEY); } catch (e) {} }
+function downloadBackupCSV() {
+  var b = loadBackup();
+  if (!b) return;
+  var m = b.meta || buildMeta();
+  var extra = { participant: b.pid || 'P??', condition: b.code || '?', hz: m.hz, gaze: m.gaze, ver: m.ver };
+  [['topo_soa', b.e1 || []], ['fit_topo_search', b.e2 || []]].forEach(function (p) {
+    if (!p[1].length) return;
+    var blob = new Blob([csvOf(p[1], extra)], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (b.pid || 'P??') + '_backup_' + p[0] + '.csv';
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
   });
@@ -1322,9 +1529,9 @@ function e1Summary(trials) {
 function e2Summary(trials) {
   var out = {};
   ['feature', 'conjunction', 'topology'].forEach(function (cond) {
-    var r6 = trials.filter(function (t) { return t.block === cond && t.n === 6 && t.target === 1 && t.corr === 1 && t.rt !== ''; })
+    var r6 = trials.filter(function (t) { return t.block === cond && t.n === 6 && t.target === 1 && t.corr === 1 && t.rt !== '' && t.rt >= 200; })
       .map(function (t) { return t.rt; });
-    var r18 = trials.filter(function (t) { return t.block === cond && t.n === 18 && t.target === 1 && t.corr === 1 && t.rt !== ''; })
+    var r18 = trials.filter(function (t) { return t.block === cond && t.n === 18 && t.target === 1 && t.corr === 1 && t.rt !== '' && t.rt >= 200; })
       .map(function (t) { return t.rt; });
     var m6 = median(r6), m18 = median(r18);
     out[cond] = (m6 === null || m18 === null) ? null : round1(m18 - m6);
@@ -1341,7 +1548,7 @@ function drawChart1(mine, cls) {
   function y(v) { return padT + ch * (1 - v / 105); }
   c.strokeStyle = '#C9D3E8'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(padL, padT); c.lineTo(padL, padT + ch); c.lineTo(padL + cw, padT + ch); c.stroke();
-  c.fillStyle = '#8A97B5'; c.font = '12px sans-serif'; c.textAlign = 'right';
+  c.fillStyle = '#5E6C8C'; c.font = '12px sans-serif'; c.textAlign = 'right';
   [0, 25, 50, 75, 100].forEach(function (v) {
     c.fillText(v + '%', padL - 8, y(v) + 4);
     c.strokeStyle = '#EEF2FA'; c.beginPath(); c.moveTo(padL, y(v)); c.lineTo(padL + cw, y(v)); c.stroke();
@@ -1373,7 +1580,7 @@ function drawChart1(mine, cls) {
   c.font = '13px sans-serif'; c.textAlign = 'left';
   c.fillStyle = '#D98E1B'; c.fillText('● 拓扑辨别（我）', padL + 12, padT + 16);
   c.fillStyle = '#3D6FD1'; c.fillText('● 形状辨别（我）', padL + 140, padT + 16);
-  if (cls) { c.fillStyle = '#8A97B5'; c.fillText('┄ 全班均值', padL + 268, padT + 16); }
+  if (cls) { c.fillStyle = '#5E6C8C'; c.fillText('┄ 全班均值', padL + 268, padT + 16); }
   $('chart1-note').textContent = '金色/蓝色阴影为收数前注册的预测带（拓扑 65–75 / 75–85 / 90–100；形状 50–60 / 55–65 / 90–100，%）。预测：最短 SOA 下拓扑辨别显著高于形状辨别，随 SOA 延长差距消失（Chen, 1982：5 ms 下环–圆 64.5% vs 圆–方 43.5%）。';
 }
 function drawChart2(mine, cls) {
@@ -1387,7 +1594,7 @@ function drawChart2(mine, cls) {
   var names = ['特征', '联合', '拓扑(新增)'];
   var xs = conds.map(function (_, i) { return padL + cw * (0.18 + 0.32 * i); });
   c.strokeStyle = '#C9D3E8'; c.beginPath(); c.moveTo(padL, padT); c.lineTo(padL, padT + ch); c.lineTo(padL + cw, padT + ch); c.stroke();
-  c.fillStyle = '#8A97B5'; c.font = '12px sans-serif'; c.textAlign = 'right';
+  c.fillStyle = '#5E6C8C'; c.font = '12px sans-serif'; c.textAlign = 'right';
   [0, 100, 200, 300, 400].forEach(function (v) {
     c.fillText(v + '', padL - 8, y(v) + 4);
     c.strokeStyle = '#EEF2FA'; c.beginPath(); c.moveTo(padL, y(v)); c.lineTo(padL + cw, y(v)); c.stroke();
@@ -1405,21 +1612,104 @@ function drawChart2(mine, cls) {
   c.setLineDash([]);
   function bar(v, x, color) {
     if (v === null) return;
-    var h = y(0) - y(Math.max(0, v));
+    var vc = Math.max(-ymax, Math.min(ymax, v));   /* 超出纵轴时钳制在绘图区内，数值标签仍显示真实值 */
+    var h = y(0) - y(Math.max(0, vc));
     c.fillStyle = color;
-    if (v >= 0) c.fillRect(x - 22, y(v), 44, h);
-    else c.fillRect(x - 22, y(0), 44, y(v) - y(0));
+    if (vc >= 0) c.fillRect(x - 22, y(vc), 44, h);
+    else c.fillRect(x - 22, y(0), 44, y(vc) - y(0));
     c.fillStyle = '#22304A'; c.font = '12px sans-serif'; c.textAlign = 'center';
     c.fillText(v + '', x, y(Math.max(0, v)) - 6);
   }
   conds.forEach(function (cond, i) { bar(mine[cond], xs[i], '#D98E1B'); });
-  if (cls) conds.forEach(function (cond, i) { bar(cls[cond], xs[i] + 0, 'rgba(61,111,209,.45)'); });
+  /* 全班均值：横虚线参考线（与图1视觉语言一致，避免与个人柱完全重叠） */
+  if (cls) {
+    c.strokeStyle = '#7A9BE0'; c.lineWidth = 2; c.setLineDash([6, 5]);
+    conds.forEach(function (cond, i) {
+      if (cls[cond] !== null && cls[cond] !== undefined) {
+        c.beginPath(); c.moveTo(xs[i] - 60, y(cls[cond])); c.lineTo(xs[i] + 60, y(cls[cond])); c.stroke();
+      }
+    });
+    c.setLineDash([]);
+    c.fillStyle = '#5E6C8C'; c.font = '13px sans-serif'; c.textAlign = 'left';
+    c.fillText('┄ 全班均值', padL + 150, padT + 16);
+  }
   $('chart2-note').textContent = '蓝色虚线为 Treisman & Gelade (1980) 参考值换算（特征 ≈37 ms，联合 ≈344 ms）；金色带为预设「高效搜索」带（±10 ms/item × 12 = ±120 ms）。预测：特征 ΔRT 接近 0，联合明显为正；拓扑条件若落入带内则支持拓扑性质 pop-out（Chen, 2005）。';
 }
 
+/* 眼动热点图：把归一化注视坐标在低分辨率累加画布上做高斯溅射，再按强度映射成色带 */
+function heatRamp(t) {
+  /* 白 → 浅蓝 → 青 → 绿 → 黄 → 橙 → 红 */
+  var stops = [[255,255,255],[168,204,255],[92,200,224],[96,208,128],[250,228,96],[244,132,56],[206,32,32]];
+  var p = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  var i = Math.min(stops.length - 2, Math.floor(p)), f = p - i;
+  var a = stops[i], b = stops[i + 1];
+  return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f)];
+}
+function drawGazeHeatmap() {
+  var cv = $('chart-gaze'), c = cv.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  if (!G.samples.length) return;
+  var gw = 160, gh = 90, R = 7;
+  var acc = document.createElement('canvas'); acc.width = gw; acc.height = gh;
+  var ac = acc.getContext('2d');
+  ac.fillStyle = '#000'; ac.fillRect(0, 0, gw, gh);
+  ac.globalCompositeOperation = 'lighter';
+  G.samples.forEach(function (s) {
+    var x = s.x * gw, y = s.y * gh;
+    var g = ac.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, 'rgba(255,255,255,0.28)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ac.fillStyle = g;
+    ac.beginPath(); ac.arc(x, y, R, 0, Math.PI * 2); ac.fill();
+  });
+  var img = ac.getImageData(0, 0, gw, gh).data;
+  var max = 1;
+  for (var i = 0; i < img.length; i += 4) if (img[i] > max) max = img[i];
+  var tmp = document.createElement('canvas'); tmp.width = gw; tmp.height = gh;
+  var tc = tmp.getContext('2d');
+  var out = tc.createImageData(gw, gh);
+  for (var j = 0; j < img.length; j += 4) {
+    var rgb = heatRamp(img[j] / max);
+    out.data[j] = rgb[0]; out.data[j + 1] = rgb[1]; out.data[j + 2] = rgb[2]; out.data[j + 3] = 255;
+  }
+  tc.putImageData(out, 0, 0);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(tmp, 0, 0, cv.width, cv.height);
+  /* 屏幕边框参考线 */
+  c.strokeStyle = '#C9D3E8'; c.lineWidth = 1.5;
+  c.strokeRect(1, 1, cv.width - 2, cv.height - 2);
+}
+function gazeStatsNote() {
+  var e1 = 0, e2 = 0, offSum = 0;
+  G.samples.forEach(function (s) {
+    if (s.e === 'e1') e1++; else e2++;
+    offSum += Math.sqrt(Math.pow(s.x - .5, 2) + Math.pow(s.y - .5, 2));
+  });
+  var meanOff = G.samples.length ? Math.round(1000 * offSum / G.samples.length) / 1000 : 0;
+  var headTxt = G.headBase ? '同时用 MediaPipe FaceMesh 检测了头部姿势（yaw/pitch/roll 相对基线偏离见各试次 CSV 的 hd_* 列）。' : '';
+  return '共记录 ' + G.samples.length + ' 个注视样本（实验一 ' + e1 + ' · 实验二 ' + e2 + '），平均离屏心距离 ' + meanOff +
+    '（归一化，0 = 正中心）。颜色越红表示注视越密集。坐标仅由本机摄像头实时估计（约 10 样本/秒），未上传视频；实验全程不向被试显示注视点。' + headTxt;
+}
+function downloadGazeCSV() {
+  if (!G.samples.length) return;
+  var lines = ['sample,experiment,x,y'];
+  G.samples.forEach(function (s, i) { lines.push((i + 1) + ',' + s.e + ',' + s.x + ',' + s.y); });
+  var blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = S.pid + '_gaze.csv';
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+}
 function renderResults() {
   drawChart1(e1Summary(S.data.e1), classData ? classData.e1 : null);
   drawChart2(e2Summary(S.data.e2), classData ? classData.e2 : null);
+  if (G.samples.length) {
+    $('gaze-card').style.display = 'block';
+    drawGazeHeatmap();
+    $('gaze-note').textContent = gazeStatsNote();
+  }
 }
 async function fetchClass() {
   var btn = $('btn-class');
@@ -1430,6 +1720,7 @@ async function fetchClass() {
     var recs = r.records || [];
     var byP = {};
     recs.forEach(function (rec) {
+      if ((rec.experiment || '').indexOf('test_') === 0) return;   /* 排除测试模式数据，防止污染全班均值 */
       var p = rec.participant || 'P?';
       if (!byP[p]) byP[p] = { e1: [], e2: [] };
       var trs = rec.trials || [];
@@ -1493,12 +1784,29 @@ async function runE1() {
     await waitClick('ins-start');
     sizeStim(); trialScreen(true);
     $('taskhint').textContent = task === 'topo' ? '任务：判断图形有没有洞' : '任务：判断圆形还是方形';
-    setHint(task === 'topo' ? '有洞' : '圆形', task === 'topo' ? '无洞' : '方形');
+    if (task === 'topo') {
+      setHint('有洞', '无洞',
+        [{ shape: 'circle', color: COLORS.black, ring: true }, { shape: 'square', color: COLORS.black, ring: true }],
+        [{ shape: 'circle', color: COLORS.black }, { shape: 'square', color: COLORS.black }]);
+    } else {
+      setHint('圆形', '方形',
+        [{ shape: 'circle', color: COLORS.black }],
+        [{ shape: 'square', color: COLORS.black }]);
+    }
     setProgress(S.data.e1.length / 60);
     await sleep(600);
-    await runE1Block(task, buildE1Practice(task), buildE1Trials(task));
+    var choice = 'again';
+    while (choice === 'again') {
+      await runE1Trials(task, buildE1Practice(task), true);
+      trialScreen(false);
+      choice = await practiceEnd('实验一 · ' + (task === 'topo' ? '有没有洞' : '圆还是方'));
+      if (choice === 'again') { trialScreen(true); await sleep(600); }
+    }
+    trialScreen(true);
+    await sleep(600);
+    await runE1Trials(task, buildE1Trials(task), false);
     trialScreen(false);
-    if (i === 0) await restScreen('知觉星 · 稍作休息', '第一部分完成，10 秒后进入第二部分', 10);
+    if (i === 0) await restScreen('知觉星 · 稍作休息', '第一部分完成，即将进入第二部分', 10);
   }
   uploadExp('e1', E1_NAME);
 }
@@ -1512,14 +1820,51 @@ async function runE2() {
     await waitClick('ins-start');
     sizeStim(); trialScreen(true);
     $('taskhint').textContent = '任务：判断阵列中是否存在目标';
-    setHint('有目标', '无目标');
+    var e2Icons;
+    if (cond === 'feature') {
+      /* 目标全集：蓝圆、蓝方、红三角、绿三角——四个样例全部展示，避免被试只记住其中两类 */
+      e2Icons = [
+        { shape: 'circle', color: COLORS.blue }, { shape: 'square', color: COLORS.blue },
+        { shape: 'triangle', color: COLORS.red }, { shape: 'triangle', color: COLORS.green }
+      ];
+    } else if (cond === 'conjunction') {
+      e2Icons = [{ shape: 'circle', color: COLORS.green }];
+    } else {
+      e2Icons = S.assign.topoDir === 0
+        ? [{ shape: 'circle', color: COLORS.red, ring: true }]
+        : [{ shape: 'circle', color: COLORS.red }];
+    }
+    setHint('有目标', '无目标', e2Icons, null, null, '没有这类图形');
     setProgress(S.data.e2.length / 120);
     await sleep(600);
-    await runE2Block(cond, buildE2Practice(cond), buildE2Trials(cond));
+    var choice = 'again';
+    while (choice === 'again') {
+      await runE2Trials(cond, buildE2Practice(cond), true);
+      trialScreen(false);
+      choice = await practiceEnd('实验二 · ' + (cond === 'feature' ? '特征搜索' : cond === 'conjunction' ? '联合搜索' : '拓扑搜索'));
+      if (choice === 'again') { trialScreen(true); await sleep(600); }
+    }
+    trialScreen(true);
+    await sleep(600);
+    await runE2Trials(cond, buildE2Trials(cond), false);
     trialScreen(false);
-    if (i < conds.length - 1) await restScreen('搜索星 · 稍作休息', '第 ' + (i + 1) + ' / 3 部分完成，10 秒后继续', 10);
+    if (i < conds.length - 1) await restScreen('搜索星 · 稍作休息', '第 ' + (i + 1) + ' / 3 部分完成', 10);
   }
   uploadExp('e2', E2_NAME);
+}
+
+/* 练习结束确认页：返回 'formal'（开始正式）或 'again'（再练一轮） */
+function practiceEnd(label) {
+  return new Promise(function (res) {
+    var f = $('pe-formal'), a = $('pe-again');
+    $('pe-text').textContent = '「' + label + '」练习结束。';
+    showScene('scene-practice-end');
+    function onF() { cleanup(); res('formal'); }
+    function onA() { cleanup(); res('again'); }
+    function cleanup() { f.removeEventListener('click', onF); a.removeEventListener('click', onA); }
+    f.addEventListener('click', onF);
+    a.addEventListener('click', onA);
+  });
 }
 
 function waitClick(id) {
@@ -1538,26 +1883,32 @@ function showFinish() {
     div.id = 'upload-' + k;
     div.className = 'upload-line';
     var st = S.upload[k];
-    div.textContent = name + '：' + (st === 'ok' ? '已提交' : st === 'err' ? '未成功（请下载备份）' : '提交中…');
+    div.textContent = S.uploadMsg[k] || (name + '：' + (st === 'ok' ? '已提交' : st === 'err' ? '未成功（请下载备份）' : '提交中…'));
     div.classList.add(st === 'ok' ? 'ok' : st === 'err' ? 'err' : 'warn');
     $('upload-status').appendChild(div);
   });
 }
 
 /* 星图点击 */
+function lockedHint() {
+  var h = $('map-hint');
+  h.textContent = '请先完成标有「→ 下一站」的星球';
+  setTimeout(function () { h.textContent = '沿着航线前进，点击发光的星球'; }, 1800);
+}
 $('planet-1').addEventListener('click', async function () {
-  if (this.classList.contains('locked')) return;
+  if (this.classList.contains('locked')) { lockedHint(); return; }
   var btn = this;
   flyTo(btn, async function () { await runE1(); S.done.e1 = true; showScene('scene-starmap'); refreshPlanets(); });
 });
 $('planet-2').addEventListener('click', async function () {
-  if (this.classList.contains('locked')) return;
+  if (this.classList.contains('locked')) { lockedHint(); return; }
   var btn = this;
   flyTo(btn, async function () { await runE2(); S.done.e2 = true; showScene('scene-starmap'); refreshPlanets(); });
 });
 
 /* 舰桥 → 同意 */
 $('launch-btn').addEventListener('click', function () {
+  if (S.started) { showScene('scene-starmap'); refreshPlanets(); return; }   /* 已开始过：直接回星图，不重走同意页（也防键盘焦点误触发重置流程） */
   var btn = this;
   btn.classList.add('flaring');
   setTimeout(function () { btn.classList.remove('flaring'); showScene('scene-consent'); }, reduceMotion ? 0 : 480);
@@ -1566,15 +1917,18 @@ $('launch-btn').addEventListener('click', function () {
 /* 同意页 */
 $('consent-main').addEventListener('change', function () { $('consent-btn').disabled = !this.checked; });
 $('consent-btn').addEventListener('click', async function () {
+  var btn = this;
   var num = parseInt($('pid-num').value, 10);
-  if (isNaN(num) || num < 0 || num > 99) { $('pid-num').focus(); return; }
+  if (isNaN(num) || num < 0 || num > 99) { $('pid-err').style.display = 'block'; $('pid-num').focus(); return; }
+  $('pid-err').style.display = 'none';
+  btn.disabled = true;   /* 防连点：同意页是单向流程，此后不再返回 */
   S.test = num === 0;
   S.num = ((num - 1) % 12 + 12) % 12 + 1 || 1;
   if (num === 0) S.num = 1;
   S.assign = ASSIGN[S.num - 1];
   S.pid = S.test ? 'P00' : 'P' + (num < 10 ? '0' : '') + num;
   S.order = S.assign.expOrder === 0 ? ['e1', 'e2'] : ['e2', 'e1'];
-  S.meta = buildMeta();
+  S.started = true;
 
   G.wanted = $('consent-gaze').checked;
   if (G.wanted) {
@@ -1587,40 +1941,115 @@ $('consent-btn').addEventListener('click', async function () {
 
 function gazeLoadThenWait() {
   return new Promise(function (resolve) {
+    var settled = false;
+    /* 统一出口：无论超时/失败/用户跳过，都保证流程继续，绝不死等 */
+    function done(v, msg) {
+      if (settled) return; settled = true;
+      clearTimeout(loadCap);
+      if (msg) $('calib-status').textContent = msg;
+      setTimeout(function () { resolve(v); }, msg ? 1200 : 0);
+    }
+    /* 摄像头被占用/权限弹窗被忽略时 getUserMedia 可能永不返回——45 秒硬超时兜底 */
+    var loadCap = setTimeout(function () { done(false, '眼动加载超时，已自动跳过，继续实验。'); }, 45000);
+    $('calib-skip').addEventListener('click', function onSkip() {
+      this.removeEventListener('click', onSkip);
+      done(false, '已跳过眼动，继续实验。');
+    });
     gazeLoadThen(async function (ok) {
-      if (!ok) { $('calib-status').textContent = '眼动组件不可用，跳过校准，继续实验。'; await sleep(1200); resolve(false); return; }
+      if (!ok) { done(false, '眼动组件不可用，跳过校准，继续实验。'); return; }
       try {
         webgazer.params.showVideo = false;
-        webgazer.params.showPredictionPoints = true;
+        webgazer.params.showVideoPreview = false;
+        webgazer.params.showPredictionPoints = false;   /* v2 兼容写法 */
+        webgazer.params.showGazeDot = false;            /* v3 实际控制红点的参数：全程不显示红点预测点，避免干扰被试 */
+        webgazer.params.showFaceOverlay = false;        /* 也不显示人脸网格/人脸框等任何可视化 */
+        webgazer.params.showFaceFeedbackBox = false;
+        if (typeof webgazer.showPredictionPoints === 'function') webgazer.showPredictionPoints(false);
+        if (typeof webgazer.showVideo === 'function') webgazer.showVideo(false);
+        /* 指向本地 vendored MediaPipe FaceMesh（wasm/binarypb 全在站内），眼动全程离线可用 */
+        webgazer.params.faceMeshSolutionPath = 'assets/vendor/webgazer/mediapipe/face_mesh';
         webgazer.setGazeListener(function (data) {
           if (data) G.cur = { x: data.x, y: data.y, t: performance.now() };
         });
-        await webgazer.begin();
+        /* 前置体检：摄像头 API 不存在（非 localhost/HTTPS）或权限曾被拒绝时，直接给出可操作提示 */
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          done(false, '当前页面环境不支持摄像头（需 localhost 或 HTTPS 打开）。已跳过眼动，继续实验。');
+          return;
+        }
+        $('calib-status').textContent = '正在请求摄像头权限：若浏览器弹出授权请求，请点「允许」；若地址栏左侧有摄像头图标被禁用，请点它改为允许后刷新。';
+        /* begin() 可能因权限弹窗被忽略而长期 pending：分阶段更新文案，避免被试干等 */
+        var stageTimer = setTimeout(function () {
+          if (!settled) $('calib-status').textContent = '摄像头还没有响应：请确认浏览器授权弹窗点了「允许」，且摄像头未被会议软件等占用；也可点下方「跳过眼动」直接开始。';
+        }, 12000);
+        try {
+          await webgazer.begin();
+        } catch (camErr) {
+          clearTimeout(stageTimer);
+          var en = (camErr && camErr.name) || '';
+          if (en === 'NotAllowedError' || en === 'SecurityError') {
+            done(false, '摄像头权限被拒绝：请点击地址栏左侧的摄像头/锁图标，把权限改为「允许」后刷新页面重试；或点「跳过眼动」继续实验。');
+          } else if (en === 'NotFoundError' || en === 'OverconstrainedError') {
+            done(false, '未检测到可用摄像头设备，已跳过眼动，继续实验。');
+          } else if (en === 'NotReadableError' || en === 'AbortError') {
+            done(false, '摄像头被其他程序占用（如会议软件），请关闭后刷新重试；或点「跳过眼动」继续实验。');
+          } else {
+            done(false, '摄像头初始化失败（' + (en || '未知原因') + '），已跳过眼动，继续实验。');
+          }
+          return;
+        }
+        clearTimeout(stageTimer);
+        if (settled) return;   // 超时/跳过已发生，不再进入校准
+        clearTimeout(loadCap);
         G.active = true;
-        $('calib-status').textContent = '请点击金色圆点（20 秒硬上限，到时自动继续）';
-        var pts = [[.5, .5], [.12, .15], [.88, .15], [.12, .85], [.88, .85]];
-        var doneAll = false;
-        var cap = setTimeout(function () { finish(); }, 20000);
-        var clicked = 0;
+        /* 再保险：任何情况下都不向被试可视化预测点/视频（红点仅在内部记录，绝不呈现） */
+        webgazer.params.showPredictionPoints = false;
+        webgazer.params.showGazeDot = false;   /* v3 红点每帧按此参数重开，必须关掉 */
+        webgazer.params.showVideo = false;
+        webgazer.params.showVideoPreview = false;
+        webgazer.params.showFaceOverlay = false;
+        webgazer.params.showFaceFeedbackBox = false;
+        if (typeof webgazer.showPredictionPoints === 'function') webgazer.showPredictionPoints(false);
+        $('calib-status').textContent = '请点击金色圆点：9 个点依次出现，每个点注视并点击 5 次（共 45 次，60 秒硬上限，到时自动继续）';
+        /* 9 点 × 每点 5 次点击校准：沿屏幕四周依次出现（上排→中排→下排），最后回到中心 */
+        var pts = [[.12, .1], [.5, .08], [.88, .1], [.9, .5], [.88, .9], [.5, .92], [.12, .9], [.1, .5], [.5, .5]];
+        var CLICKS_PER_POINT = 5;
+        var ptIdx = 0, ptClicks = 0;
+        var cap = setTimeout(function () { finish(); }, 60000);
         function finish() {
           clearTimeout(cap);
           var dots = document.querySelectorAll('.calib-point');
           for (var i = 0; i < dots.length; i++) dots[i].remove();
-          G.calibrated = clicked >= pts.length;
+          G.calibrated = ptIdx >= pts.length;
           webgazer.params.showPredictionPoints = false;
-          resolve(true);
+          webgazer.params.showGazeDot = false;
+          if (typeof webgazer.showPredictionPoints === 'function') webgazer.showPredictionPoints(false);
+          headPoseCaptureBaseline();   /* 校准结束时以当前端正姿势为 MediaPipe 头动基线 */
+          done(true);
         }
         function showNext() {
-          if (clicked >= pts.length) { finish(); return; }
+          if (ptIdx >= pts.length) { finish(); return; }
           var d = document.createElement('button');
           d.className = 'calib-point';
-          d.style.left = (pts[clicked][0] * 100) + '%';
-          d.style.top = (pts[clicked][1] * 100) + '%';
-          d.addEventListener('click', function () { d.remove(); clicked++; showNext(); });
+          d.style.left = (pts[ptIdx][0] * 100) + '%';
+          d.style.top = (pts[ptIdx][1] * 100) + '%';
+          updateDot();
+          d.addEventListener('click', function () {
+            ptClicks++;
+            if (ptClicks >= CLICKS_PER_POINT) {
+              d.remove(); ptIdx++; ptClicks = 0;
+              showNext();
+            } else {
+              updateDot();
+            }
+          });
+          function updateDot() {
+            /* 点内显示剩余点击次数，给被试明确反馈 */
+            d.textContent = String(CLICKS_PER_POINT - ptClicks);
+          }
           document.body.appendChild(d);
         }
         showNext();
-      } catch (e) { $('calib-status').textContent = '摄像头不可用，跳过校准。'; await sleep(1200); resolve(false); }
+      } catch (e) { done(false, '摄像头不可用，跳过校准。'); }
     });
   });
 }
@@ -1629,13 +2058,35 @@ function gazeLoadThenWait() {
 $('btn-results').addEventListener('click', function () { renderResults(); showScene('scene-results'); });
 $('btn-csv').addEventListener('click', downloadCSV);
 $('btn-class').addEventListener('click', fetchClass);
+$('btn-gaze-csv').addEventListener('click', downloadGazeCSV);
 $('btn-back-finish').addEventListener('click', function () { showScene('scene-finish'); });
 
-/* 摄像头可选项：file:// 下不可用，隐藏该行 */
-if (location.protocol !== 'file:') $('gaze-row').style.display = 'flex';
+/* 摄像头可选项：file:// 下不可用（浏览器禁止加载本地 wasm 模型），隐藏勾选行并提示改用启动器 */
+if (location.protocol !== 'file:') {
+  $('gaze-row').style.display = 'flex';
+} else {
+  $('file-warn').style.display = 'block';
+}
+
+/* 小屏/触屏设备提醒（不阻断，仅提示换电脑） */
+if (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 720) $('device-warn').style.display = 'block';
+
+/* 切窗记录：切走标签页会扰乱帧对齐呈现，meta 中记录次数（blur）供分析时核查 */
+document.addEventListener('visibilitychange', function () { if (document.hidden) S.blurs++; });
+
+/* 断点备份：舰桥页检测上次未完成会话的本地备份，提供下载/清除 */
+(function checkBackup() {
+  var b = loadBackup();
+  if (!b || (!(b.e1 && b.e1.length) && !(b.e2 && b.e2.length))) { clearBackup(); return; }
+  $('bk-text').textContent = '检测到本机留有上次未完成实验的备份（编号 ' + (b.pid || 'P??') + '，共 ' + ((b.e1 || []).length + (b.e2 || []).length) + ' 试次）。若该被试中途退出，可下载备份交给主试；本次实验不会自动续用这些数据。';
+  $('bk-banner').style.display = 'flex';
+})();
+$('bk-download').addEventListener('click', downloadBackupCSV);
+$('bk-clear').addEventListener('click', function () { clearBackup(); $('bk-banner').style.display = 'none'; });
 
 /* 初始化：刷新率估计 */
 estimateHz(function (hz) { S.hz = hz; });
+if ($('ver-tag')) $('ver-tag').textContent = 'v' + VER;
 
 })();
 </script>
