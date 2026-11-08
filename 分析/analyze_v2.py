@@ -249,7 +249,7 @@ EX.append(f"- 敏感性分析：实验一剔除 P11 后 30 ms 拓扑−形状 = 
           f"{paired_t(m1('topo',30,acc1)[:-1] if 'P11' in eff1 else m1('topo',30,acc1), m1('shape',30,acc1)[:-1] if 'P11' in eff1 else m1('shape',30,acc1))[3]:+.1f}%（含 P11 全样本 {h1[30][3]:+.1f}%），结论方向不变" if "P11" in eff1 else "")
 EX.append("")
 
-with open(os.path.join(SUBMIT, "数据结果", "排除日志.md"), "w", encoding="utf-8") as f:
+with open(os.path.join(SUBMIT, "分析", "排除日志.md"), "w", encoding="utf-8") as f:
     f.write("\n".join(EX))
 
 # ============================================================
@@ -456,7 +456,7 @@ ax.set_ylabel("d′（log-linear 校正）")
 ax.set_title("实验一：信号检测灵敏度 d′（黑点=个体）", fontsize=10.5)
 ax.legend(frameon=False)
 fig.tight_layout()
-fig.savefig(os.path.join(SUBMIT, "数据结果", "图1_实验一正确率与dprime.png"), dpi=160)
+fig.savefig(os.path.join(SUBMIT, "分析", "图1_实验一正确率与dprime.png"), dpi=160)
 
 fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.4))
 ax = axes[0]
@@ -495,7 +495,7 @@ ax.set_ylabel("正确 RT 中位数 (ms)")
 ax.set_title("实验二：目标在场 RT × 集合大小（细线=个体）", fontsize=10.5)
 ax.legend(frameon=False)
 fig.tight_layout()
-fig.savefig(os.path.join(SUBMIT, "数据结果", "图2_实验二搜索斜率.png"), dpi=160)
+fig.savefig(os.path.join(SUBMIT, "分析", "图2_实验二搜索斜率.png"), dpi=160)
 
 W(f"\n**图 1**（图1_实验一正确率与dprime.png）　**图 2**（图2_实验二搜索斜率.png）\n")
 
@@ -607,7 +607,7 @@ W("""## 五、综合讨论（结合设计预测与原文献）
 W("\n---\n*分析脚本：分析/analyze_v2.py（numpy / scipy / pandas）；报告由脚本按数据自动生成，2026-11-08。"
   "异常与极端值排除明细见《数据结果/排除日志.md》。*")
 
-out = os.path.join(SUBMIT, "数据结果", "作业二_结果与讨论报告.md")
+out = os.path.join(SUBMIT, "分析", "作业二_结果与讨论报告.md")
 with open(out, "w", encoding="utf-8") as f:
     f.write("\n".join(L))
 
@@ -627,6 +627,6 @@ for lab in h2p:
 print(f"TOST: md={md_tf:+.2f} p_low={p_low:.4f} p_hi={p_hi:.4f} p_tost={p_tost:.4f}")
 print(f"方向: 找圆环(n={len(dir_ring)}) {topo_ring.mean():.1f}±{topo_ring.std(ddof=1):.1f} | 找实心圆(n={len(dir_solid)}) {topo_solid.mean():.1f}±{topo_solid.std(ddof=1):.1f}")
 print("[已写出]", out)
-print("[已写出]", os.path.join(SUBMIT, "数据结果", "图1_实验一正确率与dprime.png"))
-print("[已写出]", os.path.join(SUBMIT, "数据结果", "图2_实验二搜索斜率.png"))
-print("[已写出]", os.path.join(SUBMIT, "数据结果", "排除日志.md"))
+print("[已写出]", os.path.join(SUBMIT, "分析", "图1_实验一正确率与dprime.png"))
+print("[已写出]", os.path.join(SUBMIT, "分析", "图2_实验二搜索斜率.png"))
+print("[已写出]", os.path.join(SUBMIT, "分析", "排除日志.md"))
