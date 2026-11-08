@@ -79,7 +79,7 @@
 | 公开链接 | ✅ 已发布：https://attention-lab-bnu.app.workbuddy.host/?sharecode=SHUTHC7F2R （HTTPS，见本文件首行） |
 | WebGazer 眼动 | 已实现（本地 `assets/vendor/webgazer/webgazer.js` v3，自托管不依赖 CDN；需 localhost/HTTPS，file:// 自动跳过；**9 点校准 × 每点点击 5 次**，60 秒硬上限，失败不阻断核心实验；**基于 MediaPipe FaceMesh 同步做头部姿势检测**（yaw/pitch/roll 相对基线偏离写入各试次 CSV 的 `hd_*` 列）；全程**不向被试显示红点/注视轨迹**，注视数据仅内部记录用于离屏与头动质量控制，单独报告有效人数） |
 | 模型可视化 | 已实现（结束页「查看我的结果」：实验一 SOA 预测带图、实验二 ΔRT 文献参考线与 ±120 ms 高效搜索带；预测配置收数前 commit，实测只更新观察层） |
-| ≥ 10 名被试 | ✅ 达成（2026-11-08 收数：实验二 12 人、实验一 11 人按预案剔除 P09 后有效 10 人） |
+| ≥ 10 名被试 | ✅ 达成（2026-11-08 收数：两实验各 11 人，实验一按预案剔除 P09 后有效 10 人） |
 | 与全班数据对比 | 已实现（结果页按钮拉取 `GET /api/hw2/data?project=` 同项目匿名数据，同一公式计算均值并叠加虚线；数据未开放时显示获取失败，不虚构对比） |
 
 **GitHub Pages 部署五步**：① 仓库设为 Public（Settings → General → Danger Zone）；② 入口文件命名 `index.html` 放仓库根目录并 push；③ Settings → Pages → Deploy from a branch → `main` / `/ (root)`；④ 等 1–2 分钟打开生成的链接自测一遍，确认显示“已提交”；⑤ 把链接写回本 README 第一行并填到仓库 About 的 Website 栏。
